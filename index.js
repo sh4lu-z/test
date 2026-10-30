@@ -3,12 +3,23 @@ const readline = require('readline');
 const WIDTH = 15;
 const HEIGHT = 8;
 
-const player = { x: 1, y: 1, hp: 50, maxHp: 50, atk: 10, inventory: [] };
-let gameLog = 'Explore with WASD, attack enemies, or open chests (C) with key H to use potion.';
+const player = {
+  x: 1,
+  y: 1,
+  hp: 50,
+  maxHp: 50,
+  atk: 10,
+  level: 1,
+  xp: 0,
+  xpNeeded: 20,
+  inventory: []
+};
+
+let gameLog = 'Explore with WASD, defeat enemies for XP to level up!';
 
 const enemies = [
-  { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, x: 5, y: 2 },
-  { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, x: 9, y: 5 }
+  { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, xpYield: 15, x: 5, y: 2 },
+  { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, xpYield: 25, x: 9, y: 5 }
 ];
 
 const chests = [
@@ -59,13 +70,30 @@ function getChestAt(x, y) {
   return chests.find(c => !c.opened && c.x === x && c.y === y);
 }
 
+function grantXp(amount) {
+  player.xp += amount;
+  let logAddition = ` Gained ${amount} XP!`;
+
+  if (player.xp >= player.xpNeeded) {
+    player.level += 1;
+    player.xp -= player.xpNeeded;
+    player.xpNeeded = Math.floor(player.xpNeeded * 1.5);
+    player.maxHp += 15;
+    player.hp = player.maxHp;
+    player.atk += 3;
+    logAddition += ` LEVEL UP! Now Level ${player.level} (Max HP +15, ATK +3)!`;
+  }
+
+  return logAddition;
+}
+
 function openChest(chest) {
   chest.opened = true;
   dungeon[chest.y][chest.x] = '.';
 
   if (chest.item.heal) {
     player.inventory.push(chest.item.name);
-    gameLog = `Opened chest! Found ${chest.item.name} (+${chest.item.heal} HP). Press H to use.`;
+    gameLog = `Opened chest! Found ${chest.item.name}. Press H to use.`;
   } else if (chest.item.atkBoost) {
     player.atk += chest.item.atkBoost;
     player.inventory.push(chest.item.name);
@@ -91,7 +119,8 @@ function attackEnemy(enemy) {
   if (enemy.hp <= 0) {
     enemy.hp = 0;
     dungeon[enemy.y][enemy.x] = '.';
-    gameLog = `Victory! You defeated the ${enemy.name}!`;
+    const xpNotice = grantXp(enemy.xpYield);
+    gameLog = `Victory! Defeated ${enemy.name}!${xpNotice}`;
     return;
   }
 
@@ -109,8 +138,8 @@ function renderMap(grid) {
   console.clear();
   console.log('--- DUNGEON CRAWLER ---');
   console.log('@: Player | G: Goblin | S: Skeleton | C: Chest | E: Exit | #: Wall | .: Floor');
-  console.log(`Player: (${player.x}, ${player.y}) | HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk}`);
-  console.log(`Inventory: [${player.inventory.join(', ')}] | Press H to heal`);
+  console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | XP: ${player.xp}/${player.xpNeeded}`);
+  console.log(`HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk} | Inv: [${player.inventory.join(', ')}]`);
   console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
@@ -190,8 +219,8 @@ module.exports = {
   spawnEntities,
   renderMap,
   movePlayer,
-  usePotion,
-  openChest,
+  attackEnemy,
+  grantXp,
   player,
   enemies,
   chests,
