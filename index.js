@@ -16,7 +16,12 @@ const player = {
   inventory: []
 };
 
-let gameLog = 'Beware! The Dungeon Boss (B) guards the dungeon exit (E)! Defeat it to win!';
+let gameLog = 'Lore: Ancient runes whisper of a dragon imprisoned below... Press T near runes (?) to read lore.';
+
+const ancientRunes = [
+  { x: 3, y: 1, symbol: '?', text: 'Rune I: "The dragon fears sharp steel and warrior spirit. Equip well before facing it."' },
+  { x: 10, y: 4, symbol: '?', text: 'Rune II: "Potions brewed by the wanderer mend wounds that magic cannot heal."' }
+];
 
 const merchant = {
   x: 7,
@@ -58,6 +63,12 @@ function createMap(width, height) {
 }
 
 function spawnEntities(grid) {
+  for (const rune of ancientRunes) {
+    if (grid[rune.y][rune.x] === '.') {
+      grid[rune.y][rune.x] = rune.symbol;
+    }
+  }
+
   if (grid[merchant.y][merchant.x] === '.') {
     grid[merchant.y][merchant.x] = merchant.symbol;
   }
@@ -83,13 +94,17 @@ function getChestAt(x, y) {
   return chests.find(c => !c.opened && c.x === x && c.y === y);
 }
 
+function getRuneAt(x, y) {
+  return ancientRunes.find(r => r.x === x && r.y === y);
+}
+
 function buyFromMerchant() {
   if (player.gold >= merchant.potionPrice) {
     player.gold -= merchant.potionPrice;
     player.inventory.push('Health Potion');
-    gameLog = `Merchant: "A potion for you!" (Bought Health Potion for ${merchant.potionPrice}G).`;
+    gameLog = `Merchant: "May this potion keep you alive against the beast!" (Bought for ${merchant.potionPrice}G).`;
   } else {
-    gameLog = `Merchant: "Not enough gold! Potions cost ${merchant.potionPrice}G."`;
+    gameLog = `Merchant: "Times are tough, traveler. Bring me ${merchant.potionPrice} gold for a potion."`;
   }
 }
 
@@ -145,7 +160,7 @@ function attackEnemy(enemy) {
     dungeon[enemy.y][enemy.x] = '.';
     const rewards = grantRewards(enemy);
     if (enemy.isBoss) {
-      gameLog = `VICTORY! You defeated the Dungeon Boss ${enemy.name}! The exit (E) is open!${rewards}`;
+      gameLog = `VICTORY! The Dragon Boss let out a final roar and perished! The exit (E) is open!${rewards}`;
     } else {
       gameLog = `Victory! Defeated ${enemy.name}!${rewards}`;
     }
@@ -159,16 +174,16 @@ function attackEnemy(enemy) {
     return;
   }
 
-  gameLog = `You hit ${enemy.name} for ${player.atk} DMG. ${enemy.name} retaliates for ${enemy.atk} DMG!`;
+  gameLog = `You strike ${enemy.name} for ${player.atk} DMG! ${enemy.name} lashes out for ${enemy.atk} DMG!`;
 }
 
 function renderMap(grid) {
   console.clear();
-  console.log('--- DUNGEON CRAWLER ---');
-  console.log('@: Player | M: Merchant | B: Boss | G: Goblin | S: Skeleton | C: Chest | E: Exit');
+  console.log('=== REALM OF SHADOWS: DUNGEON CRAWLER ===');
+  console.log('@: Player | M: Merchant | B: Boss | G: Goblin | S: Skeleton | ?: Lore Rune | C: Chest | E: Exit');
   console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | Gold: ${player.gold}G | XP: ${player.xp}/${player.xpNeeded}`);
   console.log(`HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk} | Inv: [${player.inventory.join(', ')}]`);
-  console.log(`Controls: WASD | H: Heal | B: Buy Potion near Merchant | Ctrl+C: Quit`);
+  console.log(`Controls: WASD | H: Heal | B: Shop | T: Read Lore | Ctrl+C: Quit`);
   console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
@@ -176,7 +191,7 @@ function renderMap(grid) {
   }
 
   console.log('\nEntities:');
-  console.log(`- Merchant [M]: Selling Potions (10G)`);
+  console.log(`- Merchant [M]: At (${merchant.x}, ${merchant.y}) selling Potions (10G)`);
   for (const e of enemies) {
     const status = e.hp > 0 ? `HP: ${e.hp}/${e.maxHp} at (${e.x}, ${e.y})` : 'Defeated';
     const tag = e.isBoss ? ' [BOSS]' : '';
@@ -200,15 +215,21 @@ function movePlayer(dx, dy) {
     return;
   }
 
+  // Check rune inspection on walk
+  const rune = getRuneAt(nextX, nextY);
+  if (rune) {
+    gameLog = rune.text;
+  }
+
   // Exit check
   if (dungeon[nextY][nextX] === 'E') {
     const boss = enemies.find(e => e.isBoss);
     if (boss && boss.hp > 0) {
-      gameLog = 'The Dungeon Exit is sealed! You must slay the Dragon Boss (B) first!';
+      gameLog = 'The Dungeon Exit is sealed by dragon flames! Defeat the Dragon Boss (B) first!';
       renderMap(dungeon);
       return;
     } else {
-      gameLog = 'CONGRATULATIONS! You escaped the dungeon victorious!';
+      gameLog = 'CONGRATULATIONS! You unlocked the ancient exit and stepped into the sunlight!';
       dungeon[player.y][player.x] = '.';
       player.x = nextX;
       player.y = nextY;
@@ -274,6 +295,15 @@ if (process.stdin.isTTY) {
       }
       renderMap(dungeon);
     }
+    if (key.name === 't') {
+      const runeNearby = ancientRunes.find(r => Math.abs(player.x - r.x) <= 1 && Math.abs(player.y - r.y) <= 1);
+      if (runeNearby) {
+        gameLog = runeNearby.text;
+      } else {
+        gameLog = 'No ancient runes nearby to decipher.';
+      }
+      renderMap(dungeon);
+    }
   });
 }
 
@@ -285,7 +315,7 @@ module.exports = {
   renderMap,
   movePlayer,
   attackEnemy,
-  buyFromMerchant,
+  ancientRunes,
   merchant,
   player,
   enemies,
