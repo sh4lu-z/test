@@ -3,7 +3,8 @@ const readline = require('readline');
 const WIDTH = 15;
 const HEIGHT = 8;
 
-const player = { x: 1, y: 1, hp: 50, maxHp: 50 };
+const player = { x: 1, y: 1, hp: 50, maxHp: 50, atk: 10 };
+let gameLog = 'Welcome to the dungeon! Use WASD to explore or bump into enemies to attack.';
 
 const enemies = [
   { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, x: 5, y: 2 },
@@ -43,11 +44,32 @@ function getEnemyAt(x, y) {
   return enemies.find(e => e.hp > 0 && e.x === x && e.y === y);
 }
 
+function attackEnemy(enemy) {
+  enemy.hp -= player.atk;
+
+  if (enemy.hp <= 0) {
+    enemy.hp = 0;
+    dungeon[enemy.y][enemy.x] = '.';
+    gameLog = `Victory! You defeated the ${enemy.name}!`;
+    return;
+  }
+
+  player.hp -= enemy.atk;
+  if (player.hp <= 0) {
+    player.hp = 0;
+    gameLog = `Defeat! You were struck down by ${enemy.name}...`;
+    return;
+  }
+
+  gameLog = `You hit ${enemy.name} for ${player.atk} DMG. ${enemy.name} hits back for ${enemy.atk} DMG!`;
+}
+
 function renderMap(grid) {
   console.clear();
   console.log('--- DUNGEON CRAWLER ---');
   console.log('@: Player | G: Goblin | S: Skeleton | E: Exit | #: Wall | .: Floor');
-  console.log(`Player: (${player.x}, ${player.y}) HP: ${player.hp}/${player.maxHp} | Controls: W/A/S/D | Ctrl+C to exit\n`);
+  console.log(`Player: (${player.x}, ${player.y}) | HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk}`);
+  console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
     console.log(row.join(' '));
@@ -64,6 +86,10 @@ const dungeon = createMap(WIDTH, HEIGHT);
 spawnEnemies(dungeon, enemies);
 
 function movePlayer(dx, dy) {
+  if (player.hp <= 0) {
+    return;
+  }
+
   const nextX = player.x + dx;
   const nextY = player.y + dy;
 
@@ -72,8 +98,11 @@ function movePlayer(dx, dy) {
     return;
   }
 
-  // Block movement if enemy occupies the cell
-  if (getEnemyAt(nextX, nextY)) {
+  // Attack enemy if occupying cell
+  const targetEnemy = getEnemyAt(nextX, nextY);
+  if (targetEnemy) {
+    attackEnemy(targetEnemy);
+    renderMap(dungeon);
     return;
   }
 
@@ -109,6 +138,7 @@ module.exports = {
   spawnEnemies,
   renderMap,
   movePlayer,
+  attackEnemy,
   getEnemyAt,
   player,
   enemies,
