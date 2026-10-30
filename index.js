@@ -16,19 +16,19 @@ const player = {
   inventory: []
 };
 
-let gameLog = 'Explore with WASD, defeat monsters, find chests, or trade with Merchant (M)!';
+let gameLog = 'Beware! The Dungeon Boss (B) guards the dungeon exit (E)! Defeat it to win!';
 
 const merchant = {
   x: 7,
   y: 3,
   symbol: 'M',
-  potionPrice: 10,
-  swordPrice: 25
+  potionPrice: 10
 };
 
 const enemies = [
-  { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, xpYield: 15, goldYield: 10, x: 5, y: 2 },
-  { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, xpYield: 25, goldYield: 20, x: 9, y: 5 }
+  { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, xpYield: 15, goldYield: 10, x: 5, y: 2, isBoss: false },
+  { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, xpYield: 25, goldYield: 20, x: 9, y: 5, isBoss: false },
+  { id: 3, name: 'Dragon Boss', symbol: 'B', hp: 60, maxHp: 60, atk: 14, xpYield: 100, goldYield: 100, x: 12, y: 6, isBoss: true }
 ];
 
 const chests = [
@@ -144,27 +144,31 @@ function attackEnemy(enemy) {
     enemy.hp = 0;
     dungeon[enemy.y][enemy.x] = '.';
     const rewards = grantRewards(enemy);
-    gameLog = `Victory! Defeated ${enemy.name}!${rewards}`;
+    if (enemy.isBoss) {
+      gameLog = `VICTORY! You defeated the Dungeon Boss ${enemy.name}! The exit (E) is open!${rewards}`;
+    } else {
+      gameLog = `Victory! Defeated ${enemy.name}!${rewards}`;
+    }
     return;
   }
 
   player.hp -= enemy.atk;
   if (player.hp <= 0) {
     player.hp = 0;
-    gameLog = `Defeat! You were struck down by ${enemy.name}...`;
+    gameLog = `Defeat! You were struck down by ${enemy.name}... Game Over.`;
     return;
   }
 
-  gameLog = `You hit ${enemy.name} for ${player.atk} DMG. ${enemy.name} hits back for ${enemy.atk} DMG!`;
+  gameLog = `You hit ${enemy.name} for ${player.atk} DMG. ${enemy.name} retaliates for ${enemy.atk} DMG!`;
 }
 
 function renderMap(grid) {
   console.clear();
   console.log('--- DUNGEON CRAWLER ---');
-  console.log('@: Player | M: Merchant | G: Goblin | S: Skeleton | C: Chest | E: Exit | #: Wall');
+  console.log('@: Player | M: Merchant | B: Boss | G: Goblin | S: Skeleton | C: Chest | E: Exit');
   console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | Gold: ${player.gold}G | XP: ${player.xp}/${player.xpNeeded}`);
   console.log(`HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk} | Inv: [${player.inventory.join(', ')}]`);
-  console.log(`Controls: WASD | H: Heal | B: Buy Potion (10G) near Merchant | Ctrl+C: Quit`);
+  console.log(`Controls: WASD | H: Heal | B: Buy Potion near Merchant | Ctrl+C: Quit`);
   console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
@@ -172,10 +176,11 @@ function renderMap(grid) {
   }
 
   console.log('\nEntities:');
-  console.log(`- Merchant [M]: At (${merchant.x}, ${merchant.y}) selling Potions (10G)`);
+  console.log(`- Merchant [M]: Selling Potions (10G)`);
   for (const e of enemies) {
     const status = e.hp > 0 ? `HP: ${e.hp}/${e.maxHp} at (${e.x}, ${e.y})` : 'Defeated';
-    console.log(`- ${e.name} [${e.symbol}]: ${status}`);
+    const tag = e.isBoss ? ' [BOSS]' : '';
+    console.log(`- ${e.name}${tag} [${e.symbol}]: ${status}`);
   }
 }
 
@@ -193,6 +198,24 @@ function movePlayer(dx, dy) {
   // Check wall collision
   if (dungeon[nextY][nextX] === '#') {
     return;
+  }
+
+  // Exit check
+  if (dungeon[nextY][nextX] === 'E') {
+    const boss = enemies.find(e => e.isBoss);
+    if (boss && boss.hp > 0) {
+      gameLog = 'The Dungeon Exit is sealed! You must slay the Dragon Boss (B) first!';
+      renderMap(dungeon);
+      return;
+    } else {
+      gameLog = 'CONGRATULATIONS! You escaped the dungeon victorious!';
+      dungeon[player.y][player.x] = '.';
+      player.x = nextX;
+      player.y = nextY;
+      dungeon[player.y][player.x] = '@';
+      renderMap(dungeon);
+      return;
+    }
   }
 
   // Check merchant interaction
