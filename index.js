@@ -1,7 +1,10 @@
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
 
 const WIDTH = 15;
 const HEIGHT = 8;
+const SAVE_FILE = path.join(__dirname, 'savegame.json');
 
 const player = {
   x: 1,
@@ -16,7 +19,8 @@ const player = {
   inventory: []
 };
 
-let gameLog = 'Lore: Ancient runes whisper of a dragon imprisoned below... Press T near runes (?) to read lore.';
+let score = 0;
+let gameLog = 'Explore with WASD, attack monsters, read runes (T). Press K to Save, L to Load!';
 
 const ancientRunes = [
   { x: 3, y: 1, symbol: '?', text: 'Rune I: "The dragon fears sharp steel and warrior spirit. Equip well before facing it."' },
@@ -74,7 +78,7 @@ function spawnEntities(grid) {
   }
 
   for (const enemy of enemies) {
-    if (grid[enemy.y][enemy.x] === '.') {
+    if (enemy.hp > 0 && grid[enemy.y][enemy.x] === '.') {
       grid[enemy.y][enemy.x] = enemy.symbol;
     }
   }
@@ -111,6 +115,7 @@ function buyFromMerchant() {
 function grantRewards(enemy) {
   player.gold += enemy.goldYield;
   player.xp += enemy.xpYield;
+  score += enemy.xpYield * 10;
   let logAddition = ` Gained ${enemy.xpYield} XP and ${enemy.goldYield} Gold!`;
 
   if (player.xp >= player.xpNeeded) {
@@ -120,6 +125,7 @@ function grantRewards(enemy) {
     player.maxHp += 15;
     player.hp = player.maxHp;
     player.atk += 3;
+    score += 100;
     logAddition += ` LEVEL UP! Now Level ${player.level} (Max HP +15, ATK +3)!`;
   }
 
@@ -129,6 +135,7 @@ function grantRewards(enemy) {
 function openChest(chest) {
   chest.opened = true;
   dungeon[chest.y][chest.x] = '.';
+  score += 50;
 
   if (chest.item.heal) {
     player.inventory.push(chest.item.name);
@@ -152,6 +159,57 @@ function usePotion() {
   gameLog = `Used Health Potion! Restored 25 HP (Current HP: ${player.hp}/${player.maxHp}).`;
 }
 
+function saveGame() {
+  const data = {
+    player,
+    score,
+    enemies,
+    chests
+  };
+
+  try {
+    fs.writeFileSync(SAVE_FILE, JSON.stringify(data, null, 2));
+    gameLog = 'Game progress successfully saved to savegame.json!';
+  } catch (err) {
+    gameLog = `Failed to save game: ${err.message}`;
+  }
+}
+
+function loadGame() {
+  if (!fs.existsSync(SAVE_FILE)) {
+    gameLog = 'No saved game file found!';
+    return;
+  }
+
+  try {
+    const raw = fs.readFileSync(SAVE_FILE, 'utf8');
+    const data = JSON.parse(raw);
+
+    Object.assign(player, data.player);
+    score = data.score || 0;
+
+    for (let i = 0; i < enemies.length; i++) {
+      if (data.enemies[i]) Object.assign(enemies[i], data.enemies[i]);
+    }
+    for (let i = 0; i < chests.length; i++) {
+      if (data.chests[i]) Object.assign(chests[i], data.chests[i]);
+    }
+
+    // Refresh dungeon matrix
+    const newGrid = createMap(WIDTH, HEIGHT);
+    spawnEntities(newGrid);
+    for (let y = 0; y < HEIGHT; y++) {
+      for (let x = 0; x < WIDTH; x++) {
+        dungeon[y][x] = newGrid[y][x];
+      }
+    }
+
+    gameLog = 'Saved game successfully loaded!';
+  } catch (err) {
+    gameLog = `Failed to load game: ${err.message}`;
+  }
+}
+
 function attackEnemy(enemy) {
   enemy.hp -= player.atk;
 
@@ -160,7 +218,8 @@ function attackEnemy(enemy) {
     dungeon[enemy.y][enemy.x] = '.';
     const rewards = grantRewards(enemy);
     if (enemy.isBoss) {
-      gameLog = `VICTORY! The Dragon Boss let out a final roar and perished! The exit (E) is open!${rewards}`;
+      score += 1000;
+      gameLog = `VICTORY! The Dragon Boss has fallen! Score +1000! Exit (E) unlocked!${rewards}`;
     } else {
       gameLog = `Victory! Defeated ${enemy.name}!${rewards}`;
     }
@@ -170,7 +229,7 @@ function attackEnemy(enemy) {
   player.hp -= enemy.atk;
   if (player.hp <= 0) {
     player.hp = 0;
-    gameLog = `Defeat! You were struck down by ${enemy.name}... Game Over.`;
+    gameLog = `Defeat! You were struck down by ${enemy.name}... Game Over. Final Score: ${score}`;
     return;
   }
 
@@ -181,9 +240,9 @@ function renderMap(grid) {
   console.clear();
   console.log('=== REALM OF SHADOWS: DUNGEON CRAWLER ===');
   console.log('@: Player | M: Merchant | B: Boss | G: Goblin | S: Skeleton | ?: Lore Rune | C: Chest | E: Exit');
-  console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | Gold: ${player.gold}G | XP: ${player.xp}/${player.xpNeeded}`);
+  console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | Score: ${score} | Gold: ${player.gold}G | XP: ${player.xp}/${player.xpNeeded}`);
   console.log(`HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk} | Inv: [${player.inventory.join(', ')}]`);
-  console.log(`Controls: WASD | H: Heal | B: Shop | T: Read Lore | Ctrl+C: Quit`);
+  console.log(`Controls: WASD | H: Heal | B: Shop | T: Read Lore | K: Save | L: Load | Ctrl+C: Quit`);
   console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
@@ -229,7 +288,8 @@ function movePlayer(dx, dy) {
       renderMap(dungeon);
       return;
     } else {
-      gameLog = 'CONGRATULATIONS! You unlocked the ancient exit and stepped into the sunlight!';
+      score += 500;
+      gameLog = `CONGRATULATIONS! You escaped the dungeon! Victory bonus +500! Final Score: ${score}`;
       dungeon[player.y][player.x] = '.';
       player.x = nextX;
       player.y = nextY;
@@ -304,6 +364,14 @@ if (process.stdin.isTTY) {
       }
       renderMap(dungeon);
     }
+    if (key.name === 'k') {
+      saveGame();
+      renderMap(dungeon);
+    }
+    if (key.name === 'l') {
+      loadGame();
+      renderMap(dungeon);
+    }
   });
 }
 
@@ -315,12 +383,13 @@ module.exports = {
   renderMap,
   movePlayer,
   attackEnemy,
-  ancientRunes,
-  merchant,
+  saveGame,
+  loadGame,
   player,
   enemies,
   chests,
   dungeon,
+  score,
   WIDTH,
   HEIGHT
 };
