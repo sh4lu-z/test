@@ -9,17 +9,26 @@ const player = {
   hp: 50,
   maxHp: 50,
   atk: 10,
+  gold: 20,
   level: 1,
   xp: 0,
   xpNeeded: 20,
   inventory: []
 };
 
-let gameLog = 'Explore with WASD, defeat enemies for XP to level up!';
+let gameLog = 'Explore with WASD, defeat monsters, find chests, or trade with Merchant (M)!';
+
+const merchant = {
+  x: 7,
+  y: 3,
+  symbol: 'M',
+  potionPrice: 10,
+  swordPrice: 25
+};
 
 const enemies = [
-  { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, xpYield: 15, x: 5, y: 2 },
-  { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, xpYield: 25, x: 9, y: 5 }
+  { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, xpYield: 15, goldYield: 10, x: 5, y: 2 },
+  { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, xpYield: 25, goldYield: 20, x: 9, y: 5 }
 ];
 
 const chests = [
@@ -49,6 +58,10 @@ function createMap(width, height) {
 }
 
 function spawnEntities(grid) {
+  if (grid[merchant.y][merchant.x] === '.') {
+    grid[merchant.y][merchant.x] = merchant.symbol;
+  }
+
   for (const enemy of enemies) {
     if (grid[enemy.y][enemy.x] === '.') {
       grid[enemy.y][enemy.x] = enemy.symbol;
@@ -70,9 +83,20 @@ function getChestAt(x, y) {
   return chests.find(c => !c.opened && c.x === x && c.y === y);
 }
 
-function grantXp(amount) {
-  player.xp += amount;
-  let logAddition = ` Gained ${amount} XP!`;
+function buyFromMerchant() {
+  if (player.gold >= merchant.potionPrice) {
+    player.gold -= merchant.potionPrice;
+    player.inventory.push('Health Potion');
+    gameLog = `Merchant: "A potion for you!" (Bought Health Potion for ${merchant.potionPrice}G).`;
+  } else {
+    gameLog = `Merchant: "Not enough gold! Potions cost ${merchant.potionPrice}G."`;
+  }
+}
+
+function grantRewards(enemy) {
+  player.gold += enemy.goldYield;
+  player.xp += enemy.xpYield;
+  let logAddition = ` Gained ${enemy.xpYield} XP and ${enemy.goldYield} Gold!`;
 
   if (player.xp >= player.xpNeeded) {
     player.level += 1;
@@ -119,8 +143,8 @@ function attackEnemy(enemy) {
   if (enemy.hp <= 0) {
     enemy.hp = 0;
     dungeon[enemy.y][enemy.x] = '.';
-    const xpNotice = grantXp(enemy.xpYield);
-    gameLog = `Victory! Defeated ${enemy.name}!${xpNotice}`;
+    const rewards = grantRewards(enemy);
+    gameLog = `Victory! Defeated ${enemy.name}!${rewards}`;
     return;
   }
 
@@ -137,16 +161,18 @@ function attackEnemy(enemy) {
 function renderMap(grid) {
   console.clear();
   console.log('--- DUNGEON CRAWLER ---');
-  console.log('@: Player | G: Goblin | S: Skeleton | C: Chest | E: Exit | #: Wall | .: Floor');
-  console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | XP: ${player.xp}/${player.xpNeeded}`);
+  console.log('@: Player | M: Merchant | G: Goblin | S: Skeleton | C: Chest | E: Exit | #: Wall');
+  console.log(`Player: (${player.x}, ${player.y}) | LVL: ${player.level} | Gold: ${player.gold}G | XP: ${player.xp}/${player.xpNeeded}`);
   console.log(`HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk} | Inv: [${player.inventory.join(', ')}]`);
+  console.log(`Controls: WASD | H: Heal | B: Buy Potion (10G) near Merchant | Ctrl+C: Quit`);
   console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
     console.log(row.join(' '));
   }
 
-  console.log('\nEnemies in area:');
+  console.log('\nEntities:');
+  console.log(`- Merchant [M]: At (${merchant.x}, ${merchant.y}) selling Potions (10G)`);
   for (const e of enemies) {
     const status = e.hp > 0 ? `HP: ${e.hp}/${e.maxHp} at (${e.x}, ${e.y})` : 'Defeated';
     console.log(`- ${e.name} [${e.symbol}]: ${status}`);
@@ -166,6 +192,13 @@ function movePlayer(dx, dy) {
 
   // Check wall collision
   if (dungeon[nextY][nextX] === '#') {
+    return;
+  }
+
+  // Check merchant interaction
+  if (nextX === merchant.x && nextY === merchant.y) {
+    gameLog = `Merchant: "Greetings traveler! Press 'B' to buy a Health Potion for 10G."`;
+    renderMap(dungeon);
     return;
   }
 
@@ -209,6 +242,15 @@ if (process.stdin.isTTY) {
       usePotion();
       renderMap(dungeon);
     }
+    if (key.name === 'b') {
+      const isNearMerchant = Math.abs(player.x - merchant.x) <= 1 && Math.abs(player.y - merchant.y) <= 1;
+      if (isNearMerchant) {
+        buyFromMerchant();
+      } else {
+        gameLog = 'You must be next to the Merchant (M) to buy!';
+      }
+      renderMap(dungeon);
+    }
   });
 }
 
@@ -220,7 +262,8 @@ module.exports = {
   renderMap,
   movePlayer,
   attackEnemy,
-  grantXp,
+  buyFromMerchant,
+  merchant,
   player,
   enemies,
   chests,
