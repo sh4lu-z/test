@@ -3,12 +3,17 @@ const readline = require('readline');
 const WIDTH = 15;
 const HEIGHT = 8;
 
-const player = { x: 1, y: 1, hp: 50, maxHp: 50, atk: 10 };
-let gameLog = 'Welcome to the dungeon! Use WASD to explore or bump into enemies to attack.';
+const player = { x: 1, y: 1, hp: 50, maxHp: 50, atk: 10, inventory: [] };
+let gameLog = 'Explore with WASD, attack enemies, or open chests (C) with key H to use potion.';
 
 const enemies = [
   { id: 1, name: 'Goblin', symbol: 'G', hp: 20, maxHp: 20, atk: 5, x: 5, y: 2 },
   { id: 2, name: 'Skeleton', symbol: 'S', hp: 30, maxHp: 30, atk: 8, x: 9, y: 5 }
+];
+
+const chests = [
+  { id: 1, x: 3, y: 4, item: { name: 'Health Potion', heal: 25 }, opened: false },
+  { id: 2, x: 11, y: 2, item: { name: 'Iron Sword', atkBoost: 5 }, opened: false }
 ];
 
 function createMap(width, height) {
@@ -32,16 +37,52 @@ function createMap(width, height) {
   return grid;
 }
 
-function spawnEnemies(grid, enemyList) {
-  for (const enemy of enemyList) {
+function spawnEntities(grid) {
+  for (const enemy of enemies) {
     if (grid[enemy.y][enemy.x] === '.') {
       grid[enemy.y][enemy.x] = enemy.symbol;
+    }
+  }
+
+  for (const chest of chests) {
+    if (!chest.opened && grid[chest.y][chest.x] === '.') {
+      grid[chest.y][chest.x] = 'C';
     }
   }
 }
 
 function getEnemyAt(x, y) {
   return enemies.find(e => e.hp > 0 && e.x === x && e.y === y);
+}
+
+function getChestAt(x, y) {
+  return chests.find(c => !c.opened && c.x === x && c.y === y);
+}
+
+function openChest(chest) {
+  chest.opened = true;
+  dungeon[chest.y][chest.x] = '.';
+
+  if (chest.item.heal) {
+    player.inventory.push(chest.item.name);
+    gameLog = `Opened chest! Found ${chest.item.name} (+${chest.item.heal} HP). Press H to use.`;
+  } else if (chest.item.atkBoost) {
+    player.atk += chest.item.atkBoost;
+    player.inventory.push(chest.item.name);
+    gameLog = `Opened chest! Found ${chest.item.name}! ATK increased to ${player.atk}!`;
+  }
+}
+
+function usePotion() {
+  const index = player.inventory.indexOf('Health Potion');
+  if (index === -1) {
+    gameLog = 'No Health Potion in inventory!';
+    return;
+  }
+
+  player.inventory.splice(index, 1);
+  player.hp = Math.min(player.maxHp, player.hp + 25);
+  gameLog = `Used Health Potion! Restored 25 HP (Current HP: ${player.hp}/${player.maxHp}).`;
 }
 
 function attackEnemy(enemy) {
@@ -67,8 +108,9 @@ function attackEnemy(enemy) {
 function renderMap(grid) {
   console.clear();
   console.log('--- DUNGEON CRAWLER ---');
-  console.log('@: Player | G: Goblin | S: Skeleton | E: Exit | #: Wall | .: Floor');
+  console.log('@: Player | G: Goblin | S: Skeleton | C: Chest | E: Exit | #: Wall | .: Floor');
   console.log(`Player: (${player.x}, ${player.y}) | HP: ${player.hp}/${player.maxHp} | ATK: ${player.atk}`);
+  console.log(`Inventory: [${player.inventory.join(', ')}] | Press H to heal`);
   console.log(`Log: ${gameLog}\n`);
 
   for (const row of grid) {
@@ -83,7 +125,7 @@ function renderMap(grid) {
 }
 
 const dungeon = createMap(WIDTH, HEIGHT);
-spawnEnemies(dungeon, enemies);
+spawnEntities(dungeon);
 
 function movePlayer(dx, dy) {
   if (player.hp <= 0) {
@@ -104,6 +146,12 @@ function movePlayer(dx, dy) {
     attackEnemy(targetEnemy);
     renderMap(dungeon);
     return;
+  }
+
+  // Open chest if present
+  const chest = getChestAt(nextX, nextY);
+  if (chest) {
+    openChest(chest);
   }
 
   dungeon[player.y][player.x] = '.';
@@ -128,6 +176,10 @@ if (process.stdin.isTTY) {
     if (key.name === 's' || key.name === 'down') movePlayer(0, 1);
     if (key.name === 'a' || key.name === 'left') movePlayer(-1, 0);
     if (key.name === 'd' || key.name === 'right') movePlayer(1, 0);
+    if (key.name === 'h') {
+      usePotion();
+      renderMap(dungeon);
+    }
   });
 }
 
@@ -135,13 +187,14 @@ renderMap(dungeon);
 
 module.exports = {
   createMap,
-  spawnEnemies,
+  spawnEntities,
   renderMap,
   movePlayer,
-  attackEnemy,
-  getEnemyAt,
+  usePotion,
+  openChest,
   player,
   enemies,
+  chests,
   dungeon,
   WIDTH,
   HEIGHT
